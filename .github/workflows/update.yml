@@ -2,7 +2,7 @@ name: Update Gas Prices
 
 on:
   schedule:
-    - cron: "0 13 * * *"  # runs daily at ~9 AM ET
+    - cron: "0 10 * * *"  # runs daily at ~6 AM ET
   workflow_dispatch:
 
 jobs:
