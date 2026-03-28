@@ -1,0 +1,28 @@
+name: Update Gas Prices
+
+on:
+  schedule:
+    - cron: "0 13 * * *"  # runs daily at ~9 AM ET
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11
+
+      - run: pip install requests beautifulsoup4 gspread google-auth
+
+      - name: Write creds file
+        run: echo "$GOOGLE_CREDS" > creds.json
+        env:
+          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+
+      - name: Run script
+        run: python update_gas.py
