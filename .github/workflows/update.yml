@@ -22,7 +22,8 @@ jobs:
       - name: Write creds file
         run: echo "$GOOGLE_CREDS" > creds.json
         env:
-          GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+  GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+  SHEET_ID: ${{ vars.SHEET_ID }}
 
       - name: Run script
         run: python update_gas.py
