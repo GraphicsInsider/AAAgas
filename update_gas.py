@@ -3,6 +3,7 @@ import os
 import re
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import gspread
 import requests
@@ -12,9 +13,46 @@ from google.oauth2.service_account import Credentials
 AAA_URL = "https://gasprices.aaa.com/?stream=topGas"
 SHEET_ID = os.environ["SHEET_ID"]
 GOOGLE_CREDS = os.environ["GOOGLE_CREDS"]
+BROWSERLESS_API_KEY = os.environ.get("BROWSERLESS_API_KEY", "")
+BROWSERLESS_REGION = os.environ.get("BROWSERLESS_REGION", "production-sfo")
 
 
 def fetch_aaa_html() -> str | None:
+    if BROWSERLESS_API_KEY:
+        browserless_url = f"https://{BROWSERLESS_REGION}.browserless.io/unblock?token={BROWSERLESS_API_KEY}"
+        payload = {"url": AAA_URL}
+
+        last_exc = None
+        for attempt in range(1, 4):
+            try:
+                print(f"Browserless attempt {attempt} via /unblock...")
+                r = requests.post(browserless_url, json=payload, timeout=60)
+                if r.status_code == 403:
+                    print("Browserless returned 403 for AAA. Falling back to direct fetch.")
+                    break
+                r.raise_for_status()
+
+                try:
+                    response_json = r.json()
+                    if isinstance(response_json, dict) and "content" in response_json:
+                        html = response_json["content"]
+                    else:
+                        html = r.text
+                except ValueError:
+                    html = r.text
+
+                if html and len(html) > 100:
+                    return html
+
+                print(f"Browserless returned short response: {len(html)} bytes")
+            except Exception as e:
+                last_exc = e
+                print(f"Browserless attempt {attempt} failed: {e}")
+                time.sleep(3 * attempt)
+
+        if last_exc:
+            print(f"Browserless failed after retries: {last_exc}")
+
     session = requests.Session()
     session.headers.update({
         "User-Agent": (
@@ -94,7 +132,7 @@ def write_to_sheet(prices: dict[str, float]) -> None:
     client = gspread.authorize(creds)
 
     sheet = client.open_by_key(SHEET_ID).worksheet("AAA Gas Prices")
-    now_local = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
+    now_local = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     values = [
         ["Metric", "Value", "Unit", "Source", "Refreshed"],
@@ -109,7 +147,7 @@ def write_to_sheet(prices: dict[str, float]) -> None:
     ]
 
     sheet.clear()
-    sheet.update("A1:E9", values)
+    sheet.update(values=values, range_name="A1:E9", value_input_option="USER_ENTERED")
 
     sheet.format("B2:B5", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
     sheet.format("B6:B8", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})

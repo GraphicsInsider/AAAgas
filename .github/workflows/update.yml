@@ -2,7 +2,10 @@ name: Update Gas Prices
 
 on:
   schedule:
-    - cron: "0 13 * * *"
+    # Run at both 10:00 and 11:00 UTC, then gate to exactly 6 AM America/New_York.
+    # This keeps 6 AM local time across DST changes.
+    - cron: "0 10 * * *"
+    - cron: "0 11 * * *"
   workflow_dispatch:
 
 jobs:
@@ -11,6 +14,7 @@ jobs:
 
     env:
       GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+      BROWSERLESS_API_KEY: ${{ secrets.BROWSERLESS_API_KEY }}
       SHEET_ID: ${{ vars.SHEET_ID }}
 
     steps:
@@ -23,6 +27,15 @@ jobs:
 
       - name: Install dependencies
         run: pip install requests beautifulsoup4 gspread google-auth
+
+      - name: Run only at 6 AM Eastern
+        run: |
+          hour="$(TZ=America/New_York date +%H)"
+          if [ "$hour" != "06" ]; then
+            echo "Skipping this UTC slot; NY hour is $hour."
+            exit 0
+          fi
+          echo "Running scheduled update at 6 AM America/New_York."
 
       - name: Run script
         run: python update_gas.py
