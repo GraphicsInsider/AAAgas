@@ -96,15 +96,18 @@ def html_to_lines(html: str) -> list[str]:
 
 
 def extract_regular_price(lines: list[str], label: str) -> float:
-    pattern = re.compile(rf"^{re.escape(label)}\s+\$([0-9]+(?:\.[0-9]+)?)\b")
-    for line in lines:
-        m = pattern.match(line)
-        if m:
-            return float(m.group(1))
+    # Prefer nearby-price matching because AAA text layout can split labels/prices across lines.
+    for i, line in enumerate(lines):
+        if label.lower() in line.lower():
+            for j in range(i + 1, min(i + 10, len(lines))):
+                m = re.search(r"\$?([0-9]+(?:\.[0-9]+)?)", lines[j])
+                if m:
+                    return float(m.group(1))
 
+    # Fallback: same-line matching.
     for line in lines:
-        if label in line:
-            m = re.search(r"\$([0-9]+(?:\.[0-9]+)?)", line)
+        if label.lower() in line.lower():
+            m = re.search(r"\$?([0-9]+(?:\.[0-9]+)?)", line)
             if m:
                 return float(m.group(1))
 
