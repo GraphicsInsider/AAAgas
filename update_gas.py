@@ -15,6 +15,7 @@ SHEET_ID = os.environ["SHEET_ID"]
 GOOGLE_CREDS = os.environ["GOOGLE_CREDS"]
 BROWSERLESS_API_KEY = os.environ.get("BROWSERLESS_API_KEY", "")
 BROWSERLESS_REGION = os.environ.get("BROWSERLESS_REGION", "production-sfo")
+HISTORY_WORKSHEET_NAME = "Gas Price History"
 
 
 def fetch_aaa_html() -> str | None:
@@ -96,7 +97,6 @@ def html_to_lines(html: str) -> list[str]:
 
 
 def extract_regular_price(lines: list[str], label: str) -> float:
-    # Prefer nearby-price matching because AAA text layout can split labels/prices across lines.
     for i, line in enumerate(lines):
         if label.lower() in line.lower():
             for j in range(i + 1, min(i + 10, len(lines))):
@@ -104,7 +104,6 @@ def extract_regular_price(lines: list[str], label: str) -> float:
                 if m:
                     return float(m.group(1))
 
-    # Fallback: same-line matching.
     for line in lines:
         if label.lower() in line.lower():
             m = re.search(r"\$?([0-9]+(?:\.[0-9]+)?)", line)
@@ -128,13 +127,15 @@ def get_prices() -> dict[str, float] | None:
     }
 
 
-def write_to_sheet(prices: dict[str, float]) -> None:
+def _get_client() -> gspread.Client:
     creds_info = json.loads(GOOGLE_CREDS)
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
     creds = Credentials.from_service_account_info(creds_info, scopes=scopes)
-    client = gspread.authorize(creds)
+    return gspread.authorize(creds)
 
-    sheet = client.open_by_key(SHEET_ID).worksheet("AAA Gas Prices")
+
+def write_to_sheet(prices: dict[str, float]) -> None:
+    sheet = _get_client().open_by_key(SHEET_ID).worksheet("AAA Gas Prices")
     now_local = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     values = [
@@ -156,6 +157,35 @@ def write_to_sheet(prices: dict[str, float]) -> None:
     sheet.format("B6:B8", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
 
 
+def write_to_history(prices: dict[str, float]) -> None:
+    spreadsheet = _get_client().open_by_key(SHEET_ID)
+
+    try:
+        history_sheet = spreadsheet.worksheet(HISTORY_WORKSHEET_NAME)
+    except gspread.exceptions.WorksheetNotFound:
+        history_sheet = spreadsheet.add_worksheet(
+            title=HISTORY_WORKSHEET_NAME, rows=1000, cols=5
+        )
+
+    today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+
+    existing = history_sheet.get_all_values()
+    if not existing:
+        history_sheet.append_row(
+            ["Date", "Latest", "WeekEarlier", "MonthEarlier", "YearEarlier"],
+            value_input_option="RAW",
+        )
+    elif existing[-1][0] == today:
+        print(f"History: row for {today} already exists, skipping.")
+        return
+
+    history_sheet.append_row(
+        [today, prices["current"], prices["week_ago"], prices["month_ago"], prices["year_ago"]],
+        value_input_option="RAW",
+    )
+    print(f"History: appended row for {today}.")
+
+
 def main() -> None:
     prices = get_prices()
     if prices is None:
@@ -163,6 +193,7 @@ def main() -> None:
         return
 
     write_to_sheet(prices)
+    write_to_history(prices)
     print("Updated AAA Gas Prices sheet:")
     print(prices)
 
