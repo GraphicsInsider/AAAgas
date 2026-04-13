@@ -168,14 +168,24 @@ def write_to_history(prices: dict[str, float]) -> None:
         )
 
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    header = ["Date", "Latest", "WeekEarlier", "MonthEarlier", "YearEarlier"]
 
     existing = history_sheet.get_all_values()
-    if not existing:
-        history_sheet.append_row(
-            ["Date", "Latest", "WeekEarlier", "MonthEarlier", "YearEarlier"],
-            value_input_option="RAW",
-        )
-    elif existing[-1][0] == today:
+
+    # Initialize header if sheet is empty or only contains blank rows.
+    has_any_data = any(any(str(cell).strip() for cell in row) for row in existing)
+    if not has_any_data:
+        history_sheet.update("A1:E1", [header], value_input_option="RAW")
+        existing = [header]
+
+    # Find the most recent non-empty date cell in column A.
+    last_date = None
+    for row in reversed(existing):
+        if len(row) > 0 and str(row[0]).strip() and row[0] != "Date":
+            last_date = str(row[0]).strip()
+            break
+
+    if last_date == today:
         print(f"History: row for {today} already exists, skipping.")
         return
 
