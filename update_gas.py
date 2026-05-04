@@ -366,7 +366,6 @@ def write_state_snapshot(state_rows: list[dict[str, object]]) -> None:
     if len(values) > 1:
         sheet.format(
             f"B2:B{len(values)}",
-            {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}},
         )
 
 
