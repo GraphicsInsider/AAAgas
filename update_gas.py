@@ -427,12 +427,12 @@ def main() -> None:
 
     if RUN_MODE in ("all", "state"):
         try:
-        state_rows = get_state_prices()
-        write_state_snapshot(state_rows)
-        write_state_history(state_rows)
-        write_state_csv()
-        print("Updated state gas price sheets.")
-        print(f"Parsed {len(state_rows)} state rows.")
+            state_rows = get_state_prices()
+            write_state_snapshot(state_rows)
+            write_state_history(state_rows)
+            write_state_csv()
+            print("Updated state gas price sheets.")
+            print(f"Parsed {len(state_rows)} state rows.")
         except Exception as e:
             errors.append(f"State update failed: {e}")
 
