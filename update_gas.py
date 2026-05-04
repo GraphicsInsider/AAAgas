@@ -25,6 +25,7 @@ NATIONAL_SHEET_NAME = "AAA Gas Prices"
 NATIONAL_HISTORY_SHEET_NAME = "Gas Price History"
 STATE_SHEET_NAME = "State Gas Prices"
 STATE_HISTORY_SHEET_NAME = "State Gas Price History"
+STATE_WAR_START_SHEET_NAME = "State War Start"
 
 RUN_MODE = os.environ.get("RUN_MODE", "all")
 
