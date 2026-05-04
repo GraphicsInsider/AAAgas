@@ -2,11 +2,10 @@ import json
 import os
 import re
 import time
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 import csv
 from pathlib import Path
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import gspread
 import requests
@@ -366,10 +365,6 @@ def write_state_snapshot(state_rows: list[dict[str, object]]) -> None:
 
     sheet.clear()
     sheet.update(values=values, range_name="A1", value_input_option="USER_ENTERED")
-    if len(values) > 1:
-        sheet.format(
-            f"B2:B{len(values)}",
-        )
 
 
 def write_state_history(state_rows: list[dict[str, object]]) -> None:
@@ -394,6 +389,7 @@ def write_state_history(state_rows: list[dict[str, object]]) -> None:
 
     sheet.append_rows(rows, value_input_option="RAW")
     print(f"State history: appended {len(rows)} rows for {today}.")
+
 
 def write_state_csv(state_rows: list[dict[str, object]]) -> None:
     out_path = Path("data") / "state_war_start.csv"
@@ -428,12 +424,12 @@ def main() -> None:
 
     if RUN_MODE in ("all", "state"):
         try:
-                    state_rows = get_state_prices()
-        write_state_snapshot(state_rows)
-        write_state_history(state_rows)
-        write_state_csv(state_rows)
-        print("Updated state gas price sheets.")
-        print(f"Parsed {len(state_rows)} state rows.")
+            state_rows = get_state_prices()
+            write_state_snapshot(state_rows)
+            write_state_history(state_rows)
+            write_state_csv(state_rows)
+            print("Updated state gas price sheets.")
+            print(f"Parsed {len(state_rows)} state rows.")
         except Exception as e:
             errors.append(f"State update failed: {e}")
 
