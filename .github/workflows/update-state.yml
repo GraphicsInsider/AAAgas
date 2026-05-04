@@ -1,0 +1,29 @@
+name: Update State Gas Prices
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+
+    env:
+      GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
+      SHEET_ID: ${{ vars.SHEET_ID }}
+      RUN_MODE: state
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4 gspread google-auth
+
+      - name: Run state update
+        run: python update_gas.py
