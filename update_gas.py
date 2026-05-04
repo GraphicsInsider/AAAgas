@@ -301,23 +301,23 @@ def write_to_sheet(prices: dict[str, float]) -> None:
     now_local = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S %Z")
 
     values = [
-    ["Metric", "Value", "Unit", "Source", "Refreshed"],
-    ["Current average", prices["current"], "USD/gal", AAA_URL, now_local],
-    ["Week ago average", prices["week_ago"], "USD/gal", AAA_URL, now_local],
-    ["Month ago average", prices["month_ago"], "USD/gal", AAA_URL, now_local],
-    ["Year ago average", prices["year_ago"], "USD/gal", AAA_URL, now_local],
-    ["Iran war start (Feb. 28)", 2.982, "USD/gal", "Manual", now_local],
-    ["Difference vs week ago", "=B2-B3", "", "", ""],
-    ["Difference vs month ago", "=B2-B4", "", "", ""],
-    ["Difference vs year ago", "=B2-B5", "", "", ""],
-    ["Difference vs pre-war", "=B2-B6", "", "", ""],
-    ["Last refresh", now_local, "", "", ""],
-]
+        ["Metric", "Value", "Unit", "Source", "Refreshed"],
+        ["Current average", prices["current"], "USD/gal", AAA_URL, now_local],
+        ["Week ago average", prices["week_ago"], "USD/gal", AAA_URL, now_local],
+        ["Month ago average", prices["month_ago"], "USD/gal", AAA_URL, now_local],
+        ["Year ago average", prices["year_ago"], "USD/gal", AAA_URL, now_local],
+        ["Iran war start (Feb. 28)", 2.982, "USD/gal", "Manual", now_local],
+        ["Difference vs week ago", "=B2-B3", "", "", ""],
+        ["Difference vs month ago", "=B2-B4", "", "", ""],
+        ["Difference vs year ago", "=B2-B5", "", "", ""],
+        ["Difference vs pre-war", "=B2-B6", "", "", ""],
+        ["Last refresh", now_local, "", "", ""],
+    ]
 
     sheet.clear()
     sheet.update(values=values, range_name="A1", value_input_option="USER_ENTERED")
     sheet.format("B2:B6", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
-sheet.format("B7:B10", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
+    sheet.format("B7:B10", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
 
 
 def write_to_history(prices: dict[str, float]) -> None:
