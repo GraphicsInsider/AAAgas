@@ -213,6 +213,7 @@ def build_state_keys() -> set[str]:
         ("West Virginia", "WV"),
         ("Wisconsin", "WI"),
         ("Wyoming", "WY"),
+        ("District of Columbia", "DC"),
     ]
 
     keys = set()
@@ -220,14 +221,7 @@ def build_state_keys() -> set[str]:
         keys.add(normalize_key(name))
         keys.add(normalize_key(abbr))
 
-    keys.update(
-        {
-            "districtofcolumbia",
-            "washingtondc",
-            "dc",
-            "districtofcolumbia",
-        }
-    )
+    keys.update({"districtofcolumbia", "washingtondc", "dc"})
     return keys
 
 
@@ -250,7 +244,7 @@ def get_state_prices() -> list[dict[str, object]]:
     html = fetch_state_html()
     soup = BeautifulSoup(html, "html.parser")
 
-    parsed_rows: list[dict[str, object]] = []
+    rows: list[dict[str, object]] = []
 
     for tr in soup.find_all("tr"):
         cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
@@ -261,37 +255,30 @@ def get_state_prices() -> list[dict[str, object]]:
         if not state or not is_state_label(state):
             continue
 
-        numeric_values: list[float] = []
+        # The first numeric value after the state is the current regular price.
+        regular = None
         for cell in cells[1:]:
-            value = parse_price_value(cell)
-            if value is not None:
-                numeric_values.append(value)
+            regular = parse_price_value(cell)
+            if regular is not None:
+                break
 
-        if not numeric_values:
+        if regular is None:
             continue
 
-        record: dict[str, object] = {
-            "state": state,
-            "current": numeric_values[0],
-            "yesterday": numeric_values[1] if len(numeric_values) > 1 else "",
-            "week_ago": numeric_values[2] if len(numeric_values) > 2 else "",
-            "month_ago": numeric_values[3] if len(numeric_values) > 3 else "",
-            "year_ago": numeric_values[4] if len(numeric_values) > 4 else "",
-        }
-        parsed_rows.append(record)
+        rows.append({"state": state, "regular": regular})
 
-    if not parsed_rows:
+    if not rows:
         raise ValueError("Could not parse any AAA state rows.")
 
     dedup: dict[str, dict[str, object]] = {}
-    for row in parsed_rows:
+    for row in rows:
         key = normalize_key(str(row["state"]))
         if key not in dedup:
             dedup[key] = row
 
-    rows = list(dedup.values())
-    rows.sort(key=lambda r: str(r["state"]))
-    return rows
+    result = list(dedup.values())
+    result.sort(key=lambda r: str(r["state"]))
+    return result
 
 
 def _get_client() -> gspread.Client:
@@ -363,39 +350,29 @@ def write_to_history(prices: dict[str, float]) -> None:
 
 def write_state_snapshot(state_rows: list[dict[str, object]]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-    sheet = _ensure_worksheet(spreadsheet, STATE_SHEET_NAME, rows=100, cols=7)
+    sheet = _ensure_worksheet(spreadsheet, STATE_SHEET_NAME, rows=100, cols=4)
 
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
 
-    values = [["State", "Current", "Yesterday", "Week Ago", "Month Ago", "Year Ago", "Date"]]
+    values = [["State", "Regular", "Date"]]
     for row in state_rows:
-        values.append(
-            [
-                row["state"],
-                row["current"],
-                row["yesterday"],
-                row["week_ago"],
-                row["month_ago"],
-                row["year_ago"],
-                today,
-            ]
-        )
+        values.append([row["state"], row["regular"], today])
 
     sheet.clear()
     sheet.update(values=values, range_name="A1", value_input_option="USER_ENTERED")
     if len(values) > 1:
         sheet.format(
-            f"B2:F{len(values)}",
+            f"B2:B{len(values)}",
             {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}},
         )
 
 
 def write_state_history(state_rows: list[dict[str, object]]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=7)
+    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=4)
 
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
-    header = ["Date", "State", "Current", "Yesterday", "Week Ago", "Month Ago", "Year Ago"]
+    header = ["Date", "State", "Regular"]
 
     existing = sheet.get_all_values()
     if not existing:
@@ -408,17 +385,7 @@ def write_state_history(state_rows: list[dict[str, object]]) -> None:
 
     rows = []
     for row in state_rows:
-        rows.append(
-            [
-                today,
-                row["state"],
-                row["current"],
-                row["yesterday"],
-                row["week_ago"],
-                row["month_ago"],
-                row["year_ago"],
-            ]
-        )
+        rows.append([today, row["state"], row["regular"]])
 
     sheet.append_rows(rows, value_input_option="RAW")
     print(f"State history: appended {len(rows)} rows for {today}.")
