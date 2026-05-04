@@ -161,98 +161,137 @@ def normalize_key(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", text.lower())
 
 
-def parse_price_value(text: str) -> float:
-    m = re.search(r"([0-9]+(?:\.[0-9]+)?)", text.replace(",", ""))
+def build_state_keys() -> set[str]:
+    pairs = [
+        ("Alabama", "AL"),
+        ("Alaska", "AK"),
+        ("Arizona", "AZ"),
+        ("Arkansas", "AR"),
+        ("California", "CA"),
+        ("Colorado", "CO"),
+        ("Connecticut", "CT"),
+        ("Delaware", "DE"),
+        ("Florida", "FL"),
+        ("Georgia", "GA"),
+        ("Hawaii", "HI"),
+        ("Idaho", "ID"),
+        ("Illinois", "IL"),
+        ("Indiana", "IN"),
+        ("Iowa", "IA"),
+        ("Kansas", "KS"),
+        ("Kentucky", "KY"),
+        ("Louisiana", "LA"),
+        ("Maine", "ME"),
+        ("Maryland", "MD"),
+        ("Massachusetts", "MA"),
+        ("Michigan", "MI"),
+        ("Minnesota", "MN"),
+        ("Mississippi", "MS"),
+        ("Missouri", "MO"),
+        ("Montana", "MT"),
+        ("Nebraska", "NE"),
+        ("Nevada", "NV"),
+        ("New Hampshire", "NH"),
+        ("New Jersey", "NJ"),
+        ("New Mexico", "NM"),
+        ("New York", "NY"),
+        ("North Carolina", "NC"),
+        ("North Dakota", "ND"),
+        ("Ohio", "OH"),
+        ("Oklahoma", "OK"),
+        ("Oregon", "OR"),
+        ("Pennsylvania", "PA"),
+        ("Rhode Island", "RI"),
+        ("South Carolina", "SC"),
+        ("South Dakota", "SD"),
+        ("Tennessee", "TN"),
+        ("Texas", "TX"),
+        ("Utah", "UT"),
+        ("Vermont", "VT"),
+        ("Virginia", "VA"),
+        ("Washington", "WA"),
+        ("West Virginia", "WV"),
+        ("Wisconsin", "WI"),
+        ("Wyoming", "WY"),
+    ]
+
+    keys = set()
+    for name, abbr in pairs:
+        keys.add(normalize_key(name))
+        keys.add(normalize_key(abbr))
+
+    keys.update(
+        {
+            "districtofcolumbia",
+            "washingtondc",
+            "dc",
+            "districtofcolumbia",
+        }
+    )
+    return keys
+
+
+STATE_KEYS = build_state_keys()
+
+
+def is_state_label(text: str) -> bool:
+    return normalize_key(text) in STATE_KEYS
+
+
+def parse_price_value(text: str) -> float | None:
+    cleaned = text.replace(",", " ").strip()
+    m = re.search(r"\$?([0-9]+(?:\.[0-9]+)?)", cleaned)
     if not m:
-        raise ValueError(f"Could not parse price from: {text}")
+        return None
     return float(m.group(1))
 
 
-def first_index(headers: list[str], needle: str) -> int | None:
-    needle = needle.lower()
-    for idx, header in enumerate(headers):
-        if needle in normalize_key(header):
-            return idx
-    return None
-
-
-def find_state_table_and_headers(soup: BeautifulSoup):
-    for table in soup.find_all("table"):
-        rows = table.find_all("tr")
-        if not rows:
-            continue
-
-        headers = [c.get_text(" ", strip=True) for c in rows[0].find_all(["th", "td"])]
-        if not headers:
-            continue
-
-        keys = [normalize_key(h) for h in headers]
-        has_state = any("state" in k for k in keys)
-        has_current = any(("current" in k) or ("latest" in k) or ("avg" in k) for k in keys)
-
-        if has_state and has_current:
-            return table, headers
-
-    raise ValueError("Could not find the AAA state price table.")
-
-
-def get_state_prices():
+def get_state_prices() -> list[dict[str, object]]:
     html = fetch_state_html()
     soup = BeautifulSoup(html, "html.parser")
-    table, headers = find_state_table_and_headers(soup)
 
-    header_keys = [normalize_key(h) for h in headers]
-    state_idx = first_index(headers, "state")
-    current_idx = first_index(headers, "current")
-    if current_idx is None:
-        current_idx = first_index(headers, "latest")
-    if current_idx is None:
-        current_idx = first_index(headers, "avg")
+    parsed_rows: list[dict[str, object]] = []
 
-    if state_idx is None or current_idx is None:
-        raise ValueError(f"Could not find required state/current columns. Headers: {headers}")
-
-    comparison_specs = []
-    idx = first_index(headers, "yesterday")
-    if idx is not None:
-        comparison_specs.append(("yesterday", "Yesterday", idx))
-    idx = first_index(headers, "week")
-    if idx is not None:
-        comparison_specs.append(("week_ago", "Week Ago", idx))
-    idx = first_index(headers, "month")
-    if idx is not None:
-        comparison_specs.append(("month_ago", "Month Ago", idx))
-    idx = first_index(headers, "year")
-    if idx is not None:
-        comparison_specs.append(("year_ago", "Year Ago", idx))
-
-    rows = []
-    for row in table.find_all("tr")[1:]:
-        cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
-        if len(cells) <= max([state_idx, current_idx] + [idx for _, _, idx in comparison_specs]):
+    for tr in soup.find_all("tr"):
+        cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
+        if len(cells) < 2:
             continue
 
-        state = cells[state_idx].strip()
-        if not state:
+        state = cells[0].strip()
+        if not state or not is_state_label(state):
             continue
 
-        if normalize_key(state) in {"national", "usaverage", "usa", "unitedstates"}:
+        numeric_values: list[float] = []
+        for cell in cells[1:]:
+            value = parse_price_value(cell)
+            if value is not None:
+                numeric_values.append(value)
+
+        if not numeric_values:
             continue
 
-        record = {
+        record: dict[str, object] = {
             "state": state,
-            "current": parse_price_value(cells[current_idx]),
+            "current": numeric_values[0],
+            "yesterday": numeric_values[1] if len(numeric_values) > 1 else "",
+            "week_ago": numeric_values[2] if len(numeric_values) > 2 else "",
+            "month_ago": numeric_values[3] if len(numeric_values) > 3 else "",
+            "year_ago": numeric_values[4] if len(numeric_values) > 4 else "",
         }
+        parsed_rows.append(record)
 
-        for key, _, idx in comparison_specs:
-            record[key] = parse_price_value(cells[idx])
+    if not parsed_rows:
+        raise ValueError("Could not parse any AAA state rows.")
 
-        rows.append(record)
+    dedup: dict[str, dict[str, object]] = {}
+    for row in parsed_rows:
+        key = normalize_key(str(row["state"]))
+        if key not in dedup:
+            dedup[key] = row
 
-    if not rows:
-        raise ValueError("No state rows parsed from the AAA state table.")
-
-    return rows, comparison_specs
+    rows = list(dedup.values())
+    rows.sort(key=lambda r: str(r["state"]))
+    return rows
 
 
 def _get_client() -> gspread.Client:
@@ -267,14 +306,6 @@ def _ensure_worksheet(spreadsheet: gspread.Spreadsheet, title: str, rows: int, c
         return spreadsheet.worksheet(title)
     except gspread.exceptions.WorksheetNotFound:
         return spreadsheet.add_worksheet(title=title, rows=rows, cols=cols)
-
-
-def _col_letter(n: int) -> str:
-    result = ""
-    while n > 0:
-        n, rem = divmod(n - 1, 26)
-        result = chr(65 + rem) + result
-    return result
 
 
 def write_to_sheet(prices: dict[str, float]) -> None:
@@ -294,14 +325,13 @@ def write_to_sheet(prices: dict[str, float]) -> None:
     ]
 
     sheet.clear()
-    sheet.update("A1", values, value_input_option="USER_ENTERED")
+    sheet.update(values=values, range_name="A1", value_input_option="USER_ENTERED")
     sheet.format("B2:B5", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
     sheet.format("B6:B8", {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}})
 
 
 def write_to_history(prices: dict[str, float]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-
     history_sheet = _ensure_worksheet(spreadsheet, NATIONAL_HISTORY_SHEET_NAME, rows=1000, cols=5)
 
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
@@ -311,7 +341,7 @@ def write_to_history(prices: dict[str, float]) -> None:
     has_any_data = any(any(str(cell).strip() for cell in row) for row in existing)
 
     if not has_any_data:
-        history_sheet.update("A1", [header], value_input_option="RAW")
+        history_sheet.update(values=[header], range_name="A1", value_input_option="RAW")
         existing = [header]
 
     last_date = None
@@ -331,53 +361,63 @@ def write_to_history(prices: dict[str, float]) -> None:
     print(f"History: appended row for {today}.")
 
 
-def write_state_snapshot(state_rows: list[dict], comparison_specs: list[tuple]) -> None:
+def write_state_snapshot(state_rows: list[dict[str, object]]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-    sheet = _ensure_worksheet(spreadsheet, STATE_SHEET_NAME, rows=100, cols=10)
+    sheet = _ensure_worksheet(spreadsheet, STATE_SHEET_NAME, rows=100, cols=7)
 
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
 
-    headers = ["State", "Current"] + [label for _, label, _ in comparison_specs] + ["Date"]
-    values = [headers]
-
+    values = [["State", "Current", "Yesterday", "Week Ago", "Month Ago", "Year Ago", "Date"]]
     for row in state_rows:
         values.append(
-            [row["state"], row["current"]]
-            + [row.get(key, "") for key, _, _ in comparison_specs]
-            + [today]
+            [
+                row["state"],
+                row["current"],
+                row["yesterday"],
+                row["week_ago"],
+                row["month_ago"],
+                row["year_ago"],
+                today,
+            ]
         )
 
     sheet.clear()
-    sheet.update("A1", values, value_input_option="USER_ENTERED")
-
-    last_numeric_col = 2 + len(comparison_specs)
+    sheet.update(values=values, range_name="A1", value_input_option="USER_ENTERED")
     if len(values) > 1:
         sheet.format(
-            f"B2:{_col_letter(last_numeric_col)}{len(values)}",
+            f"B2:F{len(values)}",
             {"numberFormat": {"type": "NUMBER", "pattern": "$0.000"}},
         )
 
 
-def write_state_history(state_rows: list[dict], comparison_specs: list[tuple]) -> None:
+def write_state_history(state_rows: list[dict[str, object]]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=12)
+    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=7)
 
     today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
-    existing = sheet.get_all_values()
+    header = ["Date", "State", "Current", "Yesterday", "Week Ago", "Month Ago", "Year Ago"]
 
-    if any(row and row[0] == today for row in existing[1:]):
+    existing = sheet.get_all_values()
+    if not existing:
+        sheet.update(values=[header], range_name="A1", value_input_option="RAW")
+        existing = [header]
+
+    if any(row and str(row[0]).strip() == today for row in existing[1:]):
         print(f"State history: rows for {today} already exist, skipping.")
         return
-
-    headers = ["Date", "State", "Current"] + [label for _, label, _ in comparison_specs]
-    if not existing:
-        sheet.update("A1", [headers], value_input_option="RAW")
 
     rows = []
     for row in state_rows:
         rows.append(
-            [today, row["state"], row["current"]]
-            + [row.get(key, "") for key, _, _ in comparison_specs]
+            [
+                today,
+                row["state"],
+                row["current"],
+                row["yesterday"],
+                row["week_ago"],
+                row["month_ago"],
+                row["year_ago"],
+            ]
         )
 
     sheet.append_rows(rows, value_input_option="RAW")
@@ -400,9 +440,9 @@ def main() -> None:
         errors.append(f"National update failed: {e}")
 
     try:
-        state_rows, comparison_specs = get_state_prices()
-        write_state_snapshot(state_rows, comparison_specs)
-        write_state_history(state_rows, comparison_specs)
+        state_rows = get_state_prices()
+        write_state_snapshot(state_rows)
+        write_state_history(state_rows)
         print("Updated state gas price sheets.")
         print(f"Parsed {len(state_rows)} state rows.")
     except Exception as e:
