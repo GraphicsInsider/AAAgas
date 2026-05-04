@@ -16,6 +16,7 @@ jobs:
       GOOGLE_CREDS: ${{ secrets.GOOGLE_CREDS }}
       BROWSERLESS_API_KEY: ${{ secrets.BROWSERLESS_API_KEY }}
       SHEET_ID: ${{ vars.SHEET_ID }}
+      RUN_MODE: all
 
     steps:
       - uses: actions/checkout@v5
