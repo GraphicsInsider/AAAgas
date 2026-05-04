@@ -24,6 +24,8 @@ NATIONAL_HISTORY_SHEET_NAME = "Gas Price History"
 STATE_SHEET_NAME = "State Gas Prices"
 STATE_HISTORY_SHEET_NAME = "State Gas Price History"
 
+RUN_MODE = os.environ.get("RUN_MODE", "all")
+
 
 def fetch_aaa_html() -> str | None:
     if BROWSERLESS_API_KEY:
@@ -255,7 +257,6 @@ def get_state_prices() -> list[dict[str, object]]:
         if not state or not is_state_label(state):
             continue
 
-        # The first numeric value after the state is the current regular price.
         regular = None
         for cell in cells[1:]:
             regular = parse_price_value(cell)
@@ -394,26 +395,28 @@ def write_state_history(state_rows: list[dict[str, object]]) -> None:
 def main() -> None:
     errors = []
 
-    try:
-        prices = get_national_prices()
-        if prices is None:
-            print("No national update written; leaving existing national values intact.")
-        else:
-            write_to_sheet(prices)
-            write_to_history(prices)
-            print("Updated national AAA Gas Prices sheet.")
-            print(prices)
-    except Exception as e:
-        errors.append(f"National update failed: {e}")
+    if RUN_MODE in ("all", "national"):
+        try:
+            prices = get_national_prices()
+            if prices is None:
+                print("No national update written; leaving existing national values intact.")
+            else:
+                write_to_sheet(prices)
+                write_to_history(prices)
+                print("Updated national AAA Gas Prices sheet.")
+                print(prices)
+        except Exception as e:
+            errors.append(f"National update failed: {e}")
 
-    try:
-        state_rows = get_state_prices()
-        write_state_snapshot(state_rows)
-        write_state_history(state_rows)
-        print("Updated state gas price sheets.")
-        print(f"Parsed {len(state_rows)} state rows.")
-    except Exception as e:
-        errors.append(f"State update failed: {e}")
+    if RUN_MODE in ("all", "state"):
+        try:
+            state_rows = get_state_prices()
+            write_state_snapshot(state_rows)
+            write_state_history(state_rows)
+            print("Updated state gas price sheets.")
+            print(f"Parsed {len(state_rows)} state rows.")
+        except Exception as e:
+            errors.append(f"State update failed: {e}")
 
     if errors:
         raise RuntimeError(" | ".join(errors))
