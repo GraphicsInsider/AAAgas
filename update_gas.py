@@ -370,26 +370,21 @@ def write_state_snapshot(state_rows: list[dict[str, object]]) -> None:
 
 def write_state_history(state_rows: list[dict[str, object]]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=4)
+    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=5)
 
-    today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
-    header = ["Date", "State", "Regular"]
+    timestamp = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S %Z")
+    header = ["Timestamp", "State", "Regular"]
 
     existing = sheet.get_all_values()
     if not existing:
         sheet.update(values=[header], range_name="A1", value_input_option="RAW")
-        existing = [header]
-
-    if any(row and str(row[0]).strip() == today for row in existing[1:]):
-        print(f"State history: rows for {today} already exist, skipping.")
-        return
 
     rows = []
     for row in state_rows:
-        rows.append([today, row["state"], row["regular"]])
+        rows.append([timestamp, row["state"], row["regular"]])
 
     sheet.append_rows(rows, value_input_option="RAW")
-    print(f"State history: appended {len(rows)} rows for {today}.")
+    print(f"State history: appended {len(rows)} rows for {timestamp}.")
 
 
 def write_state_csv() -> None:
