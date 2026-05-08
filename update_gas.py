@@ -370,21 +370,35 @@ def write_state_snapshot(state_rows: list[dict[str, object]]) -> None:
 
 def write_state_history(state_rows: list[dict[str, object]]) -> None:
     spreadsheet = _get_client().open_by_key(SHEET_ID)
-    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=5)
+    sheet = _ensure_worksheet(spreadsheet, STATE_HISTORY_SHEET_NAME, rows=5000, cols=4)
 
-    timestamp = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d %H:%M:%S %Z")
-    header = ["Timestamp", "State", "Regular"]
+    today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+    header = ["Date", "State", "Regular"]
 
     existing = sheet.get_all_values()
+
+    # If sheet is empty, add header.
     if not existing:
         sheet.update(values=[header], range_name="A1", value_input_option="RAW")
+        existing = [header]
 
-    rows = []
+    # Keep header, remove any prior rows for today.
+    kept_rows = [existing[0]]
+    for row in existing[1:]:
+        if not row:
+            continue
+        if str(row[0]).strip() != today:
+            kept_rows.append(row)
+
+    # Rebuild sheet so today's rows are replaced by the latest pull.
+    new_rows = [header]
+    new_rows.extend(kept_rows[1:])
     for row in state_rows:
-        rows.append([timestamp, row["state"], row["regular"]])
+        new_rows.append([today, row["state"], row["regular"]])
 
-    sheet.append_rows(rows, value_input_option="RAW")
-    print(f"State history: appended {len(rows)} rows for {timestamp}.")
+    sheet.clear()
+    sheet.update(values=new_rows, range_name="A1", value_input_option="RAW")
+    print(f"State history: wrote latest rows for {today}.")
 
 
 def write_state_csv() -> None:
